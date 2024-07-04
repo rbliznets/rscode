@@ -1,0 +1,9 @@
+menu "Reed-Solomon code"
+
+    config RS_IN_RAM
+        bool "Place code and data in IRAM"
+        default n
+        help
+            Speed up.
+        
+endmenu
