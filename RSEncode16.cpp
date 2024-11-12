@@ -13,9 +13,10 @@
 #include "esp_log.h"
 
 #ifdef CONFIG_RS_IN_RAM
-IRAM_ATTR
-#endif // CONFIG_RS_IN_RAM
+void IRAM_ATTR RSEncode16::poly_remainder(uint8_t *data, uint8_t *data_mod, uint32_t size)
+#else
 void RSEncode16::poly_remainder(uint8_t *data, uint8_t *data_mod, uint32_t size)
+#endif 
 {
     assert(data != nullptr);
     assert(data_mod != nullptr);
@@ -39,9 +40,10 @@ void RSEncode16::poly_remainder(uint8_t *data, uint8_t *data_mod, uint32_t size)
 }
 
 #ifdef CONFIG_RS_IN_RAM
-IRAM_ATTR
-#endif // CONFIG_RS_IN_RAM
+void IRAM_ATTR RSEncode16::encode(uint8_t *data_in, uint32_t size, uint8_t *data_out)
+#else
 void RSEncode16::encode(uint8_t *data_in, uint32_t size, uint8_t *data_out)
+#endif 
 {
     assert(data_in != nullptr);
     assert(data_out != nullptr);
@@ -57,9 +59,10 @@ void RSEncode16::encode(uint8_t *data_in, uint32_t size, uint8_t *data_out)
 }
 
 #ifdef CONFIG_RS_IN_RAM
-IRAM_ATTR
-#endif // CONFIG_RS_IN_RAM
+uint8_t IRAM_ATTR RSEncode16::poly_eval(uint8_t alfa, uint8_t *data_poly, uint32_t size)
+#else
 uint8_t RSEncode16::poly_eval(uint8_t alfa, uint8_t *data_poly, uint32_t size)
+#endif 
 {
     assert(data_poly != nullptr);
     assert(size > 0);
@@ -76,9 +79,10 @@ uint8_t RSEncode16::poly_eval(uint8_t alfa, uint8_t *data_poly, uint32_t size)
 }
 
 #ifdef CONFIG_RS_IN_RAM
-IRAM_ATTR
-#endif // CONFIG_RS_IN_RAM
+uint8_t IRAM_ATTR RSEncode16::poly_eval2(uint8_t data, uint8_t *data_poly, uint32_t size)
+#else
 uint8_t RSEncode16::poly_eval2(uint8_t data, uint8_t *data_poly, uint32_t size)
+#endif 
 {
     assert(data_poly != nullptr);
     assert(size > 0);
@@ -92,9 +96,10 @@ uint8_t RSEncode16::poly_eval2(uint8_t data, uint8_t *data_poly, uint32_t size)
 }
 
 #ifdef CONFIG_RS_IN_RAM
-IRAM_ATTR
-#endif // CONFIG_RS_IN_RAM
+void IRAM_ATTR RSEncode16::decode(uint8_t *data_in, uint8_t *data_out, uint32_t size)
+#else
 void RSEncode16::decode(uint8_t *data_in, uint8_t *data_out, uint32_t size)
+#endif 
 {
     assert(data_in != nullptr);
     assert(data_out != nullptr);
@@ -217,9 +222,10 @@ void RSEncode16::decode(uint8_t *data_in, uint8_t *data_out, uint32_t size)
 }
 
 #ifdef CONFIG_RS_IN_RAM
-IRAM_ATTR
-#endif // CONFIG_RS_IN_RAM
+void IRAM_ATTR RSEncode16::poly_mul(uint8_t *p1, uint32_t p1_size, uint8_t *p2, uint32_t p2_size, uint8_t *result, uint32_t result_size)
+#else
 void RSEncode16::poly_mul(uint8_t *p1, uint32_t p1_size, uint8_t *p2, uint32_t p2_size, uint8_t *result, uint32_t result_size)
+#endif 
 {
     assert(p1 != nullptr);
     assert(p1_size > 0);
