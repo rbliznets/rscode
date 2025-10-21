@@ -1,17 +1,17 @@
-# Класс кода Рида-Соломона (120,136) для ESP32 
-Для добавления в проект в папке компонентов из командной строки запустить:    
+# Reed-Solomon (120,136) Code Class for ESP32
+To add to a project in the components folder from the command line, run:    
 
     git submodule add https://github.com/rbliznets/rscode rscode 
 
 
-Тест:
+Test:
 ```
 I (197) cpu_start: cpu freq: 240000000 Hz
 
 (+1441usec) encode time
 (+3285usec) decode time
 ```
-Тест CONFIG_RS_IN_RAM=y:
+Test CONFIG_RS_IN_RAM=y:
 ```
 I (197) cpu_start: cpu freq: 240000000 Hz
 

@@ -1,5 +1,5 @@
-version: "1.0.0"
-description:  Reed-Solomon code 
+version: "1.0.1"
+description:  Reed-Solomon code (120,136)
 dependencies:
   idf:
     version: ">=5.1.0"
