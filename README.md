@@ -15,6 +15,6 @@ Test CONFIG_RS_IN_RAM=y:
 ```
 I (197) cpu_start: cpu freq: 240000000 Hz
 
-(+80usec) encode time
-(+190usec) decode time
+(+67usec) encode time
+(+163usec) decode time
 ```

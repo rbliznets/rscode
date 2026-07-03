@@ -229,12 +229,36 @@ void RSEncode16::decode(uint8_t *data_in, uint8_t *data_out, uint32_t size)
         new_loc[j] = err_loc[sz_err - 1 - j]; // Reverse the order
     }
 
-    // Find the roots of the error locator polynomial (error positions)
+    // Find the roots of the error locator polynomial (error positions) using a Chien search:
+    // instead of re-evaluating the whole polynomial from scratch at each alpha^j (poly_eval,
+    // O(sz_err) multiplications per point), keep one running term per coefficient and advance
+    // each by its own fixed alpha^k factor every step (O(sz_err) multiplications, but half as
+    // many per step, and no repeated re-derivation of the power of alpha^j from scratch).
+    // poly_eval treats data_poly[k] as the coefficient of x^(size-1-k) (it builds the sum from
+    // the constant term outward, see the loop above), so term k's power of alpha is
+    // (sz_err-1-k), not k. reg[k] is kept equal to new_loc[k] * alpha^((sz_err-1-k)*j) for the
+    // current j; their XOR-sum is the polynomial's value at alpha^j, matching
+    // poly_eval(j, new_loc, sz_err).
+    uint8_t reg[9];
+    uint8_t alphaPow[9];
+    for (uint8_t k = 0; k < sz_err; k++)
+    {
+        reg[k] = new_loc[k];
+        alphaPow[k] = galfa[sz_err - 1 - k]; // alpha^(sz_err-1-k)
+    }
+
     sz_old = 0;                               // Counter for found error positions
     for (uint8_t j = 0; j < (size + 16); j++) // Check possible error positions (message + parity length)
     {
-        // Evaluate the reversed error locator polynomial at galfa[j]
-        if (poly_eval(j, new_loc, sz_err) == 0) // If evaluation is zero, it's a root
+        // Single pass: XOR-sum the current terms (evaluation at alpha^j) while advancing each
+        // term to alpha^(k*(j+1)) for the next round, instead of two separate loops over k.
+        uint8_t sum = 0;
+        for (uint8_t k = 0; k < sz_err; k++)
+        {
+            sum ^= reg[k];
+            reg[k] = gmul[reg[k]][alphaPow[k]];
+        }
+        if (sum == 0) // If evaluation is zero, it's a root
         {
             old_loc[sz_old] = j; // Store the exponent 'j' (GF element index)
             // Calculate the corresponding position in the original received data
