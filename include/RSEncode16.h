@@ -27,6 +27,11 @@ protected:
     /// Generator polynomial.
     static const uint8_t m_G[16];
 
+    /// Precomputed gmul[x][m_G[j]] table (built once, in the constructor), so poly_remainder's
+    /// inner loop needs a single lookup instead of reading m_G[j] and then indexing gmul with it.
+    static uint8_t remTable[256][16];
+    static bool remTableInit;
+
     /// Remainder from division by the generator polynomial.
     /*!
         \param[in] data pointer to the polynomial.
@@ -62,6 +67,9 @@ protected:
     void poly_mul(uint8_t *p1, uint32_t p1_size, uint8_t *p2, uint32_t p2_size, uint8_t *result, uint32_t result_size);
 
 public:
+    /// Constructor. Builds remTable once (shared across all instances).
+    RSEncode16();
+
     /// Encoding.
     /*!
         \param[in] data_in pointer to the input data array.

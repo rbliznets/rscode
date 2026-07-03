@@ -12,6 +12,30 @@
 #include "esp_attr.h"
 #include "esp_log.h"
 
+// Conditional compilation: place the table in DRAM if CONFIG_RS_IN_RAM is defined
+#ifdef CONFIG_RS_IN_RAM
+DRAM_ATTR
+#endif
+uint8_t RSEncode16::remTable[256][16];
+bool RSEncode16::remTableInit = false;
+
+RSEncode16::RSEncode16()
+{
+    if (!remTableInit)
+    {
+        // Build the combined table once: remTable[x][j] == gmul[x][m_G[j]].
+        // Collapses the "load m_G[j], then use it to index gmul[x]" pair into a single lookup.
+        for (uint32_t x = 0; x < 256; x++)
+        {
+            for (uint32_t j = 0; j < 16; j++)
+            {
+                remTable[x][j] = gmul[x][m_G[j]];
+            }
+        }
+        remTableInit = true;
+    }
+}
+
 #ifdef CONFIG_RS_IN_RAM
 void IRAM_ATTR RSEncode16::poly_remainder(uint8_t *data, uint8_t *data_mod, uint32_t size)
 #else
@@ -30,7 +54,7 @@ void RSEncode16::poly_remainder(uint8_t *data, uint8_t *data_mod, uint32_t size)
     {
         // Multiply the leading coefficient 'x' with the generator polynomial coefficient m_G[j]
         // and XOR the result with the corresponding data coefficient
-        data_mod[j] = data[j + 1] ^ gmul[x][m_G[j]];
+        data_mod[j] = data[j + 1] ^ remTable[x][j];
     }
 
     // Continue the polynomial division process for the remaining coefficients
@@ -40,10 +64,10 @@ void RSEncode16::poly_remainder(uint8_t *data, uint8_t *data_mod, uint32_t size)
         // Shift the remainder coefficients left and update them
         for (uint32_t j = 0; j < 15; j++)
         {
-            data_mod[j] = data_mod[j + 1] ^ gmul[x][m_G[j]];
+            data_mod[j] = data_mod[j + 1] ^ remTable[x][j];
         }
         // Handle the last coefficient separately
-        data_mod[15] = data[i + 16] ^ gmul[x][m_G[15]];
+        data_mod[15] = data[i + 16] ^ remTable[x][15];
     }
 }
 
