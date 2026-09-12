@@ -6,4 +6,15 @@ menu "Reed-Solomon code"
         help
             Speed up.
         
+    config RS_PIE
+        bool "Use PIE (SIMD) instructions of ESP32-S3"
+        depends on IDF_TARGET_ESP32S3
+        default n
+        help
+            The division by the generator polynomial keeps its 16-byte remainder in one
+            128-bit Q register: a step costs one vector load of remTable[x] and one vector
+            XOR instead of 16 byte loads, XORs and stores. Speeds up encode() and, to a
+            lesser extent, decode(). The encoded and decoded data is the same as without
+            this option.
+
 endmenu

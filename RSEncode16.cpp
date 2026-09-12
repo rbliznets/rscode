@@ -19,6 +19,12 @@ DRAM_ATTR
 uint8_t RSEncode16::remTable[256][16];
 bool RSEncode16::remTableInit = false;
 
+#ifdef CONFIG_RS_PIE
+/// Main loop of poly_remainder on PIE instructions (RSEncode16_pie.S).
+extern "C" void rs_poly_remainder_pie(uint8_t *state, const uint8_t *tail, uint32_t count,
+                                      const uint8_t *remtab);
+#endif
+
 RSEncode16::RSEncode16()
 {
     if (!remTableInit)
@@ -49,6 +55,22 @@ void RSEncode16::poly_remainder(uint8_t *data, uint8_t *data_mod, uint32_t size)
 
     // Calculate the polynomial remainder using the generator polynomial m_G
     // This is essentially polynomial division in GF(2^8) to find the syndrome polynomial coefficients
+#ifdef CONFIG_RS_PIE
+    // The PIE loop keeps the remainder in one Q register, so it works in a 16-byte aligned
+    // local buffer (EE.VLD.128/EE.VST.128 need the alignment) and the result is copied out
+    // once at the end: data_mod itself carries no alignment requirement.
+    alignas(16) uint8_t state[16];
+    uint8_t x = data[0]; // Leading coefficient for the first iteration
+    for (uint32_t j = 0; j < 16; j++)
+    {
+        // Multiply the leading coefficient 'x' with the generator polynomial coefficient m_G[j]
+        // and XOR the result with the corresponding data coefficient
+        state[j] = data[j + 1] ^ remTable[x][j];
+    }
+    // The remaining size - 1 steps, one data byte each, starting at data[17]
+    rs_poly_remainder_pie(state, &data[17], size - 1, &remTable[0][0]);
+    std::memcpy(data_mod, state, 16);
+#else
     uint8_t x = data[0]; // Leading coefficient for the first iteration
     for (uint32_t j = 0; j < 16; j++)
     {
@@ -69,6 +91,7 @@ void RSEncode16::poly_remainder(uint8_t *data, uint8_t *data_mod, uint32_t size)
         // Handle the last coefficient separately
         data_mod[15] = data[i + 16] ^ remTable[x][15];
     }
+#endif
 }
 
 #ifdef CONFIG_RS_IN_RAM

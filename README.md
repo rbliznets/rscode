@@ -4,17 +4,17 @@ To add to a project in the components folder from the command line, run:
     git submodule add https://github.com/rbliznets/rscode rscode 
 
 
-Test:
+Test (ESP32-S3 240 MHz, 120 bytes, average of 100 runs, `CONFIG_RS_IN_RAM=y`):
 ```
-I (197) cpu_start: cpu freq: 240000000 Hz
-
-(+1441usec) encode time
-(+3285usec) decode time
+                     encode    decode
+CONFIG_RS_PIE=n      54 usec   110 usec
+CONFIG_RS_PIE=y     6.3 usec    62 usec
 ```
-Test CONFIG_RS_IN_RAM=y:
-```
-I (197) cpu_start: cpu freq: 240000000 Hz
-
-(+67usec) encode time
-(+163usec) decode time
-```
+`CONFIG_RS_PIE` moves the inner loop of `poly_remainder` (the division by the generator
+polynomial) to the 128-bit PIE instructions of the ESP32-S3: the 16-byte remainder is one Q
+register, so a step costs one vector load of `remTable[x]` and one vector XOR instead of 16
+byte loads, XORs and stores - 8 instructions per data byte instead of about 104. The encoder
+is almost entirely that loop; in the decoder it is about half of the time, the rest (the
+syndromes, Berlekamp-Massey, the Chien search and Forney) are data-dependent table lookups,
+which PIE has no instruction for. The encoded and decoded data is the same either way, which
+the test "RSEncode16 vectors" checks against reference ECC bytes.

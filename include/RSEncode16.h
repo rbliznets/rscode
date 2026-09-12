@@ -29,7 +29,8 @@ protected:
 
     /// Precomputed gmul[x][m_G[j]] table (built once, in the constructor), so poly_remainder's
     /// inner loop needs a single lookup instead of reading m_G[j] and then indexing gmul with it.
-    static uint8_t remTable[256][16];
+    /// 16-byte aligned: with CONFIG_RS_PIE every row remTable[x] is fetched by one EE.VLD.128.
+    alignas(16) static uint8_t remTable[256][16];
     static bool remTableInit;
 
     /// Remainder from division by the generator polynomial.
