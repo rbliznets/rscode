@@ -6,17 +6,6 @@ menu "Reed-Solomon code"
         help
             Speed up.
 
-    config RS_GMUL_IN_RAM
-        bool "Place the multiplication table gmul (64 KB) in DRAM"
-        depends on RS_IN_RAM
-        default y
-        help
-            The 256x256 multiplication table of GF(256) takes 65536 bytes. With this option it is
-            kept in internal RAM like the other tables. Without it the table stays in flash and is
-            read through the cache, which frees 64 KB of internal RAM. Only decode() reads the
-            table (the syndromes, Berlekamp-Massey, the Chien search and Forney); encode() works
-            with remTable and does not depend on this option.
-
     config RS_PIE
         bool "Use PIE (SIMD) instructions of ESP32-S3"
         depends on IDF_TARGET_ESP32S3

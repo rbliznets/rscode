@@ -29,13 +29,13 @@ RSEncode16::RSEncode16()
 {
     if (!remTableInit)
     {
-        // Build the combined table once: remTable[x][j] == gmul[x][m_G[j]].
-        // Collapses the "load m_G[j], then use it to index gmul[x]" pair into a single lookup.
+        // Build the combined table once: remTable[x][j] == x * m_G[j].
+        // Collapses the "load m_G[j], then multiply x by it" pair into a single lookup.
         for (uint32_t x = 0; x < 256; x++)
         {
             for (uint32_t j = 0; j < 16; j++)
             {
-                remTable[x][j] = gmul[x][m_G[j]];
+                remTable[x][j] = mul(x, m_G[j]);
             }
         }
         remTableInit = true;
@@ -130,15 +130,17 @@ uint8_t RSEncode16::poly_eval(uint8_t alfa, uint8_t *data_poly, uint32_t size)
     assert(data_poly != nullptr);
     assert(size > 0);
 
-    // Evaluate the polynomial at the point galfa[alfa] using Horner's method
-    uint8_t x = galfa[alfa];         // Get the Galois field element corresponding to 'alfa'
-    uint8_t x1 = x;                  // Powers of 'x' for the evaluation
-    uint8_t s = data_poly[size - 1]; // Start with the coefficient of the highest degree term
+    // Evaluate the polynomial at the point x = galfa[alfa], summing coefficient * x^(i+1).
+    // The power x^(i+1) has the logarithm alfa*(i+1) mod 255, so it is kept as a number and
+    // costs no lookup; alfa itself must be below 255.
+    uint32_t e = alfa;               // Logarithm of the current power of 'x'
+    uint8_t s = data_poly[size - 1]; // Start with the free term
     for (uint32_t i = 0; i < (size - 1); i++)
     {
-        // Horner's method: s = s * x + coefficient_of_next_lower_degree
-        s ^= gmul[data_poly[size - 2 - i]][x1]; // Multiply coefficient by current power of x and XOR to result
-        x1 = gmul[x1][x];                       // Calculate the next power of x
+        s ^= galfa[glog[data_poly[size - 2 - i]] + e]; // Multiply coefficient by current power of x and XOR to result
+        e += alfa;                                     // Logarithm of the next power of x
+        if (e >= 255)
+            e -= 255;
     }
     return s; // Return the result of the polynomial evaluation
 }
@@ -158,10 +160,10 @@ uint8_t RSEncode16::poly_eval2(uint8_t data, uint8_t *data_poly, uint32_t size)
     for (uint32_t i = 0; i < (size - 1); i++)
     {
         // Horner's method: s = s * data + coefficient_of_next_lower_degree
-        s = gmul[s][data] ^ data_poly[size - 2 - i]; // Multiply current result by 'data', then XOR with next coefficient
+        s = mul(s, data) ^ data_poly[size - 2 - i]; // Multiply current result by 'data', then XOR with next coefficient
     }
     // The final step multiplies the result by 'data' again (as per the specific polynomial evaluation needed)
-    return gmul[s][data];
+    return mul(s, data);
 }
 
 #ifdef CONFIG_RS_IN_RAM
@@ -208,7 +210,7 @@ void RSEncode16::decode(uint8_t *data_in, uint8_t *data_out, uint32_t size)
         uint8_t delta = s[i];                // Start with the current syndrome value
         for (uint8_t j = 1; j < sz_err; j++) // Sum contributions from previous error locator coefficients
         {
-            delta ^= gmul[err_loc[sz_err - j - 1]][s[i - j]]; // Multiply and XOR
+            delta ^= mul(err_loc[sz_err - j - 1], s[i - j]); // Multiply and XOR
         }
         sz_old++; // Increment degree of old_loc for this iteration
 
@@ -219,13 +221,13 @@ void RSEncode16::decode(uint8_t *data_in, uint8_t *data_out, uint32_t size)
                 // Update old_loc to the current err_loc (scaled by ginv[delta])
                 for (uint8_t j = 0; j < sz_old; j++)
                 {
-                    new_loc[j] = gmul[delta][old_loc[j]]; // Scale old_loc by delta
+                    new_loc[j] = mul(delta, old_loc[j]); // Scale old_loc by delta
                 }
                 sz_new = sz_old;
 
                 for (uint8_t j = 0; j < sz_err; j++)
                 {
-                    old_loc[j] = gmul[ginv[delta]][err_loc[j]]; // Scale err_loc by ginv[delta] and store in old_loc
+                    old_loc[j] = mul(ginv[delta], err_loc[j]); // Scale err_loc by ginv[delta] and store in old_loc
                 }
                 sz_old = sz_err; // Update sz_old
 
@@ -241,7 +243,7 @@ void RSEncode16::decode(uint8_t *data_in, uint8_t *data_out, uint32_t size)
             uint8_t k = sz_err - sz_old;         // Difference in degrees
             for (uint8_t j = k; j < sz_err; j++) // Add scaled old_loc to err_loc
             {
-                err_loc[j] ^= gmul[delta][old_loc[j - k]]; // Multiply old_loc coefficient by delta and XOR
+                err_loc[j] ^= mul(delta, old_loc[j - k]); // Multiply old_loc coefficient by delta and XOR
             }
         }
     }
@@ -255,19 +257,18 @@ void RSEncode16::decode(uint8_t *data_in, uint8_t *data_out, uint32_t size)
     // Find the roots of the error locator polynomial (error positions) using a Chien search:
     // instead of re-evaluating the whole polynomial from scratch at each alpha^j (poly_eval,
     // O(sz_err) multiplications per point), keep one running term per coefficient and advance
-    // each by its own fixed alpha^k factor every step (O(sz_err) multiplications, but half as
-    // many per step, and no repeated re-derivation of the power of alpha^j from scratch).
+    // each by its own fixed alpha^k factor every step.
     // poly_eval treats data_poly[k] as the coefficient of x^(size-1-k) (it builds the sum from
     // the constant term outward, see the loop above), so term k's power of alpha is
-    // (sz_err-1-k), not k. reg[k] is kept equal to new_loc[k] * alpha^((sz_err-1-k)*j) for the
-    // current j; their XOR-sum is the polynomial's value at alpha^j, matching
+    // (sz_err-1-k), not k. The term new_loc[k] * alpha^((sz_err-1-k)*j) for the current j is
+    // kept as its logarithm reg[k]: advancing it adds (sz_err-1-k) modulo 255, and the term
+    // itself is one lookup in galfa. A zero coefficient keeps cLogZero and reads zero. The
+    // XOR-sum of the terms is the polynomial's value at alpha^j, matching
     // poly_eval(j, new_loc, sz_err).
-    uint8_t reg[9];
-    uint8_t alphaPow[9];
+    uint16_t reg[9];
     for (uint8_t k = 0; k < sz_err; k++)
     {
-        reg[k] = new_loc[k];
-        alphaPow[k] = galfa[sz_err - 1 - k]; // alpha^(sz_err-1-k)
+        reg[k] = glog[new_loc[k]];
     }
 
     sz_old = 0;                               // Counter for found error positions
@@ -278,8 +279,13 @@ void RSEncode16::decode(uint8_t *data_in, uint8_t *data_out, uint32_t size)
         uint8_t sum = 0;
         for (uint8_t k = 0; k < sz_err; k++)
         {
-            sum ^= reg[k];
-            reg[k] = gmul[reg[k]][alphaPow[k]];
+            sum ^= galfa[reg[k]];
+            if (reg[k] != cLogZero)
+            {
+                reg[k] += sz_err - 1 - k;
+                if (reg[k] >= 255)
+                    reg[k] -= 255;
+            }
         }
         if (sum == 0) // If evaluation is zero, it's a root
         {
@@ -323,8 +329,8 @@ void RSEncode16::decode(uint8_t *data_in, uint8_t *data_out, uint32_t size)
                 if (i != j) // For each root except the current one
                 {
                     // Calculate (1 - alpha^i * alpha^j) where alpha^i is old_loc[i] and alpha^j is old_loc[j]
-                    uint8_t x = 1 ^ gmul[x_inv][old_loc[j]]; // 1 + x_inv * root_j (in GF, + is XOR)
-                    err_loc_prime = gmul[err_loc_prime][x];  // Multiply all factors together
+                    uint8_t x = 1 ^ mul(x_inv, old_loc[j]); // 1 + x_inv * root_j (in GF, + is XOR)
+                    err_loc_prime = mul(err_loc_prime, x);  // Multiply all factors together
                 }
             }
             // Optional debug check commented out
@@ -338,7 +344,7 @@ void RSEncode16::decode(uint8_t *data_in, uint8_t *data_out, uint32_t size)
             // Calculate the multiplicative inverse of the denominator (err_loc_prime)
             err_loc_prime = ginv[err_loc_prime];
             // Apply the error correction: data ^= (numerator / denominator)
-            data_out[err_loc[i]] ^= gmul[y][err_loc_prime]; // XOR the correction value
+            data_out[err_loc[i]] ^= mul(y, err_loc_prime); // XOR the correction value
         }
     }
 }
@@ -370,7 +376,7 @@ void RSEncode16::poly_mul(uint8_t *p1, uint32_t p1_size, uint8_t *p2, uint32_t p
                 break;
             // Multiply coefficients p1[n1] and p2[n2] using Galois field multiplication
             // and XOR the result into the coefficient of the resulting polynomial at degree (n1+n2)
-            result[n1 + n2] ^= gmul[p1[n1]][p2[n2]];
+            result[n1 + n2] ^= mul(p1[n1], p2[n2]);
         }
     }
 }

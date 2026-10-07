@@ -20,15 +20,19 @@
 class RSEncode16
 {
 protected:
-    static const uint8_t ginv[256];      ///< Inversion table.
-    static const uint8_t galfa[255];     ///< Power table.
-    static const uint8_t gmul[256][256]; ///< Multiplication table.
+    static constexpr uint16_t cLogZero = 512;     ///< Logarithm of zero: any sum with it points to the zero part of galfa.
+    static const uint8_t ginv[256];               ///< Inversion table.
+    static const uint16_t glog[256];              ///< Logarithm table: galfa[glog[x]] = x, glog[0] = cLogZero.
+    static const uint8_t galfa[2 * cLogZero + 1]; ///< Power table, indexed by a logarithm or by a sum of two.
+
+    /// Multiplication in GF(256): three lookups, no branch for a zero operand.
+    static inline uint8_t mul(uint8_t a, uint8_t b) { return galfa[glog[a] + glog[b]]; }
 
     /// Generator polynomial.
     static const uint8_t m_G[16];
 
-    /// Precomputed gmul[x][m_G[j]] table (built once, in the constructor), so poly_remainder's
-    /// inner loop needs a single lookup instead of reading m_G[j] and then indexing gmul with it.
+    /// Precomputed x * m_G[j] table (built once, in the constructor), so poly_remainder's
+    /// inner loop needs a single lookup instead of reading m_G[j] and then multiplying by it.
     /// 16-byte aligned: with CONFIG_RS_PIE every row remTable[x] is fetched by one EE.VLD.128.
     alignas(16) static uint8_t remTable[256][16];
     static bool remTableInit;
